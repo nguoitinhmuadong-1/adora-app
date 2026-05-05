@@ -5,8 +5,7 @@ import requests
 from geopy.geocoders import Nominatim
 
 # ===== API KEY =====
-API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjM3NDA2ODBlMDljNDQ0NTliMjNhM2ZlMTQzZGQwZmY4IiwiaCI6Im11cm11cjY0In0=
-"
+API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjM3NDA2ODBlMDljNDQ0NTliMjNhM2ZlMTQzZGQwZmY4IiwiaCI6Im11cm11cjY0In0="
 
 # ===== LOAD MODEL =====
 model = pickle.load(open("model.pkl", "rb"))
