@@ -108,34 +108,13 @@ def generate_animated_heatmap(center, campus_coord, area, tien_nghi, gio_giac, s
     time_labels = []
 
     for t in range(5):
-        temp_points = []
-        prices = []
+        frame = []
 
         for _ in range(200):
             lat = lat_center + random.uniform(-0.01, 0.01)
             lon = lon_center + random.uniform(-0.01, 0.01)
 
-            distance = np.sqrt(
-                (lat - campus_coord[1])**2 +
-                (lon - campus_coord[0])**2
-            ) * 111
-
-            features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
-            price = model.predict(features)[0]
-
-            # simulate biến động
-            price = price * (1 + random.uniform(-0.1, 0.1) + t * 0.05)
-
-            prices.append(price)
-            temp_points.append((lat, lon, price))
-
-        min_p = min(prices)
-        max_p = max(prices)
-
-        frame = []
-        for lat, lon, price in temp_points:
-            norm_price = (price - min_p) / (max_p - min_p + 1e-6)
-            frame.append([lat, lon, norm_price])
+            frame.append([lat, lon])  # 🔥 CHỈ 2 GIÁ TRỊ
 
         frames.append(frame)
         time_labels.append(f"T{t+1}")
