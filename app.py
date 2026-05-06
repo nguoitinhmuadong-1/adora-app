@@ -1,40 +1,25 @@
 import streamlit as st
-import pickle
+import pandas as pd
 import numpy as np
-import requests
+import pickle
 import folium
-from folium.plugins import HeatMap, MiniMap
+from folium.plugins import HeatMap
 from streamlit_folium import st_folium
-import random
-import time
 from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderUnavailable
 
 # ===== CONFIG =====
 st.set_page_config(page_title="ADORA", layout="centered")
 
-# ===== SESSION =====
-if "show_result" not in st.session_state:
-    st.session_state.show_result = False
-
 # ===== STYLE =====
 st.markdown("""
 <style>
-body {
-    background-color: #0e1117;
-}
-.stTextInput, .stNumberInput, .stSelectbox {
-    background-color: #1e1e2f;
-    padding: 10px;
-    border-radius: 10px;
-}
+body { background-color: #0e1117; color: white; }
 .stButton button {
     background-color: #ff4b4b;
     color: white;
     border-radius: 10px;
     height: 50px;
     font-size: 18px;
-    width: 100%;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -48,181 +33,125 @@ st.markdown("""
 # ===== LOAD MODEL =====
 model = pickle.load(open("model.pkl", "rb"))
 
-# ===== API KEY =====
-API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjMzNDdmOTk2ZDI4NjQ3NzQ4ZjQ1YjYwNGZjYjBiY2Y3IiwiaCI6Im11cm11cjY0In0="
-
-# ===== CAMPUS =====
-campuses = {
-    "UEH - Cơ sở A": (106.7009, 10.7769),
-    "UEH - Cơ sở B": (106.6660, 10.7626),
-    "UEH - Cơ sở N": (106.6943, 10.7306)
-}
-
-# ===== INPUT =====
-col1, col2 = st.columns(2)
-
-with col1:
-    address = st.text_input("📍 Địa chỉ")
-    area = st.number_input("📐 Diện tích (m²)", min_value=0.0)
-
-with col2:
-    so_nguoi = st.number_input("👥 Số người", min_value=1)
-    campus_name = st.selectbox("🏫 Cơ sở", list(campuses.keys()))
-
-tien_nghi = st.selectbox("❄️ Tiện nghi", ["Có", "Không"])
-gio_giac = st.selectbox("⏰ Giờ giấc tự do", ["Có", "Không"])
-tien_ich = st.selectbox("🏪 Tiện ích xung quanh", ["Có", "Không"])
-
-tien_nghi = 1 if tien_nghi == "Có" else 0
-gio_giac = 1 if gio_giac == "Có" else 0
-tien_ich = 1 if tien_ich == "Có" else 0
-
-# ===== GEO FIX (ANTI ERROR) =====
-def geocode(address):
-    geolocator = Nominatim(user_agent="adora_app")
-
-    for _ in range(3):
-        try:
-            location = geolocator.geocode(address, timeout=10)
-            if location:
-                return location.longitude, location.latitude
-        except GeocoderUnavailable:
-            time.sleep(1)
-
-    # fallback luôn chạy
-    return 106.7009, 10.7769  # HCM
-
-# ===== DISTANCE =====
-def get_distance(coord1, coord2):
-    try:
-        url = "https://api.openrouteservice.org/v2/directions/driving-car"
-        headers = {
-            "Authorization": API_KEY,
-            "Content-Type": "application/json"
-        }
-        body = {
-            "coordinates": [
-                [coord1[0], coord1[1]],
-                [coord2[0], coord2[1]]
-            ]
-        }
-        response = requests.post(url, json=body, headers=headers)
-        data = response.json()
-
-        return data["routes"][0]["summary"]["distance"] / 1000
-    except:
-        # fallback distance
-        return np.sqrt(
-            (coord1[0] - coord2[0])**2 +
-            (coord1[1] - coord2[1])**2
-        ) * 111
-
-# ===== HEATMAP =====
+# ===== GEOCODE =====
 @st.cache_data
-def generate_heatmap_data(center, campus_coord, area, tien_nghi, gio_giac, so_nguoi, tien_ich):
+def geocode(address):
+    try:
+        geolocator = Nominatim(user_agent="adora_app")
+        location = geolocator.geocode(address, timeout=10)
+        if location:
+            return (location.latitude, location.longitude)
+    except:
+        pass
+    return None
+
+# ===== LOAD REAL HEATMAP =====
+@st.cache_data
+def load_real_heatmap():
+    try:
+        df = pd.read_excel("bandau_full.xlsx")
+        df.columns = df.columns.str.strip()
+
+        lat_col, lon_col, price_col = None, None, None
+
+        for col in df.columns:
+            c = col.lower()
+            if "lat" in c:
+                lat_col = col
+            elif "lon" in c:
+                lon_col = col
+            elif "giá" in c or "price" in c:
+                price_col = col
+
+        if not lat_col or not lon_col:
+            return None
+
+        if not price_col:
+            df["price"] = 1
+            price_col = "price"
+
+        return df[[lat_col, lon_col, price_col]].dropna().values.tolist()
+
+    except:
+        return None
+
+# ===== LOGIC CŨ (fallback AI heatmap) =====
+def generate_heatmap_data(center):
+    lat, lon = center
     data = []
-    lat_center, lon_center = center[1], center[0]
-
-    for _ in range(300):
-        lat = lat_center + random.uniform(-0.01, 0.01)
-        lon = lon_center + random.uniform(-0.01, 0.01)
-
-        distance = np.sqrt(
-            (lat - campus_coord[1])**2 +
-            (lon - campus_coord[0])**2
-        ) * 111
-
-        features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
-        price = model.predict(features)[0]
-
-        data.append([lat, lon, price])
-
+    for _ in range(150):
+        data.append([
+            lat + np.random.uniform(-0.01, 0.01),
+            lon + np.random.uniform(-0.01, 0.01),
+            np.random.uniform(0.5, 1)
+        ])
     return data
 
-# ===== BUTTON =====
-if st.button("🔮 Dự đoán ngay"):
-    st.session_state.show_result = True
+# ===== INPUT =====
+address = st.text_input("📍 Nhập địa chỉ")
+area = st.number_input("📐 Diện tích", min_value=0.0)
+so_nguoi = st.number_input("👥 Số người", min_value=1)
 
-# ===== RESULT =====
-if st.session_state.show_result:
+# ===== PREDICT =====
+geo = None
 
-    if not address:
-        st.warning("⚠️ Vui lòng nhập địa chỉ")
-        st.stop()
+if st.button("🔮 Dự đoán"):
+    geo = geocode(address)
 
-    geo = geocode(address.strip())
+    if geo:
+        features = np.array([[2, area, 1, 1, so_nguoi, 1]])
+        price = model.predict(features)[0]
 
-    campus_coord = campuses[campus_name]
+        st.markdown(f"""
+        <div style='background:#1e1e2f;padding:20px;border-radius:15px;text-align:center;'>
+            <h2 style='color:#ff4b4b;'>💰 {int(price):,} VND</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
-    distance = get_distance(geo, campus_coord)
+    else:
+        st.error("❌ Không tìm thấy địa chỉ")
 
-    features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
-    price = model.predict(features)[0]
+# ===== MAP =====
+st.markdown("### 🗺️ Bản đồ & Heatmap")
 
-    # ===== RESULT CARD =====
-    st.markdown(f"""
-    <div style='background-color:#1e1e2f;padding:20px;border-radius:15px;text-align:center;'>
-        <h3 style='color:#00ffcc;'>📏 {distance:.2f} km</h3>
-        <h2 style='color:#ff4b4b;'>💰 {int(price):,} VND</h2>
-        <p style='color:gray;'>Giá dự đoán</p>
-    </div>
-    """, unsafe_allow_html=True)
+# fallback nếu chưa nhập địa chỉ
+if not geo:
+    geo = (10.7769, 106.7009)  # HCM
 
-    # ===== MAP =====
-    st.markdown("### 🔥 Bản đồ HeatMap giá trọ")
+# ===== LOAD HEATMAP =====
+real_data = load_real_heatmap()
 
-    heat_data = generate_heatmap_data(
-        geo,
-        campus_coord,
-        area,
-        tien_nghi,
-        gio_giac,
-        so_nguoi,
-        tien_ich
-    )
+if real_data:
+    heat_data = real_data
+    st.success("✅ Đang dùng dữ liệu thật từ Excel")
+else:
+    heat_data = generate_heatmap_data(geo)
+    st.warning("⚠️ Đang dùng dữ liệu giả (fallback)")
 
-    m = folium.Map(
-        location=[geo[1], geo[0]],
-        zoom_start=14,
-        tiles="CartoDB positron"  # 🌞 map sáng đẹp
-    )
+# ===== CREATE MAP =====
+m = folium.Map(
+    location=geo,
+    zoom_start=13,
+    tiles="CartoDB positron"
+)
 
-    HeatMap(
-        heat_data,
-        radius=20,
-        blur=18,
-        max_zoom=15,
-        gradient={
-            0.2: 'purple',
-            0.4: 'blue',
-            0.6: 'cyan',
-            0.8: 'orange',
-            1.0: 'red'
-        }
-    ).add_to(m)
+HeatMap(
+    heat_data,
+    radius=18,
+    blur=15,
+    gradient={
+        0.2: 'blue',
+        0.4: 'cyan',
+        0.6: 'yellow',
+        0.8: 'orange',
+        1.0: 'red'
+    }
+).add_to(m)
 
-    # markers
-    folium.Marker(
-        [geo[1], geo[0]],
-        popup="📍 Bạn ở đây",
-        icon=folium.Icon(color="red")
-    ).add_to(m)
+# marker vị trí user
+folium.Marker(
+    location=geo,
+    tooltip="📍 Vị trí của bạn"
+).add_to(m)
 
-    folium.Marker(
-        [campus_coord[1], campus_coord[0]],
-        popup="🏫 Trường",
-        icon=folium.Icon(color="blue")
-    ).add_to(m)
-
-    # vùng bán kính
-    folium.Circle(
-        location=[geo[1], geo[0]],
-        radius=500,
-        color='red',
-        fill=True,
-        fill_opacity=0.1
-    ).add_to(m)
-
-    MiniMap().add_to(m)
-
-    st_folium(m, width=750, height=550)
+st_folium(m, width=750, height=550)
