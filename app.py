@@ -2,11 +2,11 @@ import streamlit as st
 import pickle
 import numpy as np
 import requests
-import pandas as pd
 from geopy.geocoders import Nominatim
 import folium
-from folium.plugins import HeatMap
+from folium.plugins import HeatMap, MiniMap
 from streamlit_folium import st_folium
+import random
 
 # ===== CONFIG =====
 st.set_page_config(page_title="Dự đoán giá phòng", layout="centered")
@@ -47,13 +47,13 @@ st.markdown("""
 model = pickle.load(open("model.pkl", "rb"))
 
 # ===== API KEY =====
-API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjM3NDA2ODBlMDljNDQ0NTliMjNhM2ZlMTQzZGQwZmY4IiwiaCI6Im11cm11cjY0In0="
+API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjMzNDdmOTk2ZDI4NjQ3NzQ4ZjQ1YjYwNGZjYjBiY2Y3IiwiaCI6Im11cm11cjY0In0="
 
-# ===== CƠ SỞ =====
+# ===== CAMPUS =====
 campuses = {
-    "UEH - Cơ sở A ": (106.7009, 10.7769),
-    "UEH - Cơ sở B ": (106.6660, 10.7626),
-    "UEH - Cơ sở N ": (106.6943, 10.7306)
+    "UEH - Cơ sở A": (106.7009, 10.7769),
+    "UEH - Cơ sở B": (106.6660, 10.7626),
+    "UEH - Cơ sở N": (106.6943, 10.7306)
 }
 
 # ===== INPUT =====
@@ -67,7 +67,6 @@ with col2:
     so_nguoi = st.number_input("👥 Số người", min_value=1)
     campus_name = st.selectbox("🏫 Cơ sở", list(campuses.keys()))
 
-# ===== OPTION =====
 tien_nghi = st.selectbox("❄️ Tiện nghi", ["Có", "Không"])
 gio_giac = st.selectbox("⏰ Giờ giấc tự do", ["Có", "Không"])
 tien_ich = st.selectbox("🏪 Tiện ích xung quanh", ["Có", "Không"])
@@ -76,7 +75,7 @@ tien_nghi = 1 if tien_nghi == "Có" else 0
 gio_giac = 1 if gio_giac == "Có" else 0
 tien_ich = 1 if tien_ich == "Có" else 0
 
-# ===== GEOCODE USER =====
+# ===== GEO =====
 def geocode(address):
     geolocator = Nominatim(user_agent="rent_app")
     location = geolocator.geocode(address)
@@ -87,57 +86,41 @@ def geocode(address):
 # ===== DISTANCE =====
 def get_distance(coord1, coord2):
     url = "https://api.openrouteservice.org/v2/directions/driving-car"
-
     headers = {
         "Authorization": API_KEY,
         "Content-Type": "application/json"
     }
-
     body = {
         "coordinates": [
             [coord1[0], coord1[1]],
             [coord2[0], coord2[1]]
         ]
     }
-
     response = requests.post(url, json=body, headers=headers)
     data = response.json()
-
     return data["routes"][0]["summary"]["distance"] / 1000
 
-
-# ===== LOAD HEATMAP DATA FROM EXCEL =====
+# ===== HEATMAP DATA =====
 @st.cache_data
-def load_heatmap_data():
-    df = pd.read_excel("ch.xlsx",engine ='openyxl' )
+def generate_heatmap_data(center, campus_coord, area, tien_nghi, gio_giac, so_nguoi, tien_ich):
+    data = []
+    lat_center, lon_center = center[1], center[0]
 
-    geolocator = Nominatim(user_agent="rent_heatmap")
+    for _ in range(300):
+        lat = lat_center + random.uniform(-0.01, 0.01)
+        lon = lon_center + random.uniform(-0.01, 0.01)
 
-    lat_list = []
-    lon_list = []
+        distance = np.sqrt(
+            (lat - campus_coord[1])**2 +
+            (lon - campus_coord[0])**2
+        ) * 111
 
-    for addr in df["address"]:  # ⚠️ đổi tên nếu cột khác
-        try:
-            location = geolocator.geocode(addr)
-            if location:
-                lat_list.append(location.latitude)
-                lon_list.append(location.longitude)
-            else:
-                lat_list.append(None)
-                lon_list.append(None)
-        except:
-            lat_list.append(None)
-            lon_list.append(None)
+        features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
+        price = model.predict(features)[0]
 
-    df["lat"] = lat_list
-    df["lon"] = lon_list
+        data.append([lat, lon, price])
 
-    df = df.dropna(subset=["lat", "lon"])
-
-    heat_data = df[["lat", "lon", "price"]].values.tolist()
-
-    return heat_data
-
+    return data
 
 # ===== BUTTON =====
 if st.button("🔮 Dự đoán ngay"):
@@ -169,33 +152,67 @@ if st.session_state.show_result:
             """, unsafe_allow_html=True)
 
             # ===== HEATMAP =====
-            st.markdown("### 🔥 Bản đồ HeatMap giá trọ (Real Data)")
+            st.markdown("### 🔥 Bản đồ HeatMap giá trọ")
 
-            heat_data = load_heatmap_data()
+            heat_data = generate_heatmap_data(
+                geo,
+                campus_coord,
+                area,
+                tien_nghi,
+                gio_giac,
+                so_nguoi,
+                tien_ich
+            )
 
-            m = folium.Map(location=[geo[1], geo[0]], zoom_start=14)
+            # 🌞 MAP SÁNG
+            m = folium.Map(
+                location=[geo[1], geo[0]],
+                zoom_start=14,
+                tiles="CartoDB positron"
+            )
 
+            # 🔥 HEATMAP ĐẸP
             HeatMap(
                 heat_data,
-                radius=18,
-                blur=15
+                radius=20,
+                blur=18,
+                max_zoom=15,
+                gradient={
+                    0.2: 'purple',
+                    0.4: 'blue',
+                    0.6: 'cyan',
+                    0.8: 'orange',
+                    1.0: 'red'
+                }
             ).add_to(m)
 
-            # marker user
+            # markers
             folium.Marker(
                 [geo[1], geo[0]],
                 popup="📍 Bạn ở đây",
-                icon=folium.Icon(color="red")
+                tooltip="Bạn ở đây",
+                icon=folium.Icon(color="red", icon="home")
             ).add_to(m)
 
-            # marker trường
             folium.Marker(
                 [campus_coord[1], campus_coord[0]],
                 popup="🏫 Trường",
-                icon=folium.Icon(color="blue")
+                tooltip="Trường",
+                icon=folium.Icon(color="blue", icon="university")
             ).add_to(m)
 
-            st_folium(m, width=700, height=500)
+            # vùng xung quanh
+            folium.Circle(
+                location=[geo[1], geo[0]],
+                radius=500,
+                color='red',
+                fill=True,
+                fill_opacity=0.1
+            ).add_to(m)
+
+            MiniMap().add_to(m)
+
+            st_folium(m, width=750, height=550)
 
         except Exception as e:
-            st.error(f"❌ API lỗi hoặc dữ liệu lỗi: {e}")
+            st.error(f"❌ API lỗi hoặc quá giới hạn: {e}")
