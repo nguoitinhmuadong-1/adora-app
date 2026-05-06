@@ -133,99 +133,82 @@ if st.session_state.show_result:
             </div>
             """, unsafe_allow_html=True)
 
-            # ===== HEATMAP PRO VERSION =====
-            st.markdown("### 🔥 Bản đồ HeatMap giá trọ (AI)")
+           from folium.plugins import HeatMapWithTime
 
-            @st.cache_data
-            def generate_heatmap_data(center, campus_coord, area, tien_nghi, gio_giac, so_nguoi, tien_ich):
-                data = []
-                lat_center, lon_center = center[1], center[0]
+st.markdown("### 🎬 Heatmap động (AI Simulation)")
 
-                for _ in range(250):  # tăng điểm cho mịn hơn
-                    lat = lat_center + random.uniform(-0.01, 0.01)
-                    lon = lon_center + random.uniform(-0.01, 0.01)
+@st.cache_data
+def generate_animated_heatmap(center, campus_coord, area, tien_nghi, gio_giac, so_nguoi, tien_ich):
+    lat_center, lon_center = center[1], center[0]
 
-                    # tính khoảng cách gần đúng
-                    distance = np.sqrt(
-                        (lat - campus_coord[1])**2 +
-                        (lon - campus_coord[0])**2
-                    ) * 111
+    frames = []
+    time_labels = []
 
-                    features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
-                    price = model.predict(features)[0]
+    for t in range(5):  # 5 bước thời gian
+        frame = []
 
-                    # weight = giá (chuẩn hoá nhẹ)
-                    data.append([lat, lon, price])
+        for _ in range(200):
+            lat = lat_center + random.uniform(-0.01, 0.01)
+            lon = lon_center + random.uniform(-0.01, 0.01)
 
-                return data
+            distance = np.sqrt(
+                (lat - campus_coord[1])**2 +
+                (lon - campus_coord[0])**2
+            ) * 111
+
+            features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
+            price = model.predict(features)[0]
+
+            # tạo biến động giả lập theo thời gian
+            price = price * (1 + random.uniform(-0.1, 0.1) + t * 0.05)
+
+            frame.append([lat, lon, price])
+
+        frames.append(frame)
+        time_labels.append(f"T{t+1}")
+
+    return frames, time_labels
 
 
-            heat_data = generate_heatmap_data(
-                geo,
-                campus_coord,
-                area,
-                tien_nghi,
-                gio_giac,
-                so_nguoi,
-                tien_ich
-            )
+frames, time_labels = generate_animated_heatmap(
+    geo,
+    campus_coord,
+    area,
+    tien_nghi,
+    gio_giac,
+    so_nguoi,
+    tien_ich
+)
 
-            # ===== MAP STYLE PRO =====
-            m = folium.Map(
-                location=[geo[1], geo[0]],
-                zoom_start=14,
-                tiles="CartoDB dark_matter"   # 🔥 đẹp hơn default
-            )
+# ===== MAP =====
+m = folium.Map(
+    location=[geo[1], geo[0]],
+    zoom_start=14,
+    tiles="CartoDB dark_matter"
+)
 
-            # ===== HEATMAP GRADIENT =====
-            HeatMap(
-                heat_data,
-                radius=20,
-                blur=18,
-                max_zoom=15,
-                gradient={
-                    0.2: 'blue',
-                    0.4: 'lime',
-                    0.6: 'yellow',
-                    0.8: 'orange',
-                    1.0: 'red'
-                }
-            ).add_to(m)
+# ===== HEATMAP ANIMATION =====
+HeatMapWithTime(
+    frames,
+    index=time_labels,
+    auto_play=True,
+    max_opacity=0.8,
+    radius=20,
+    blur=15
+).add_to(m)
 
-            # ===== USER MARKER =====
-            folium.Marker(
-                [geo[1], geo[0]],
-                popup="📍 Bạn ở đây",
-                tooltip="Bạn ở đây",
-                icon=folium.Icon(color="red", icon="home")
-            ).add_to(m)
+# ===== MARKERS =====
+folium.Marker(
+    [geo[1], geo[0]],
+    popup="📍 Bạn ở đây",
+    icon=folium.Icon(color="red", icon="home")
+).add_to(m)
 
-            # ===== CAMPUS MARKER =====
-            folium.Marker(
-                [campus_coord[1], campus_coord[0]],
-                popup="🏫 Trường",
-                tooltip="Trường",
-                icon=folium.Icon(color="blue", icon="university")
-            ).add_to(m)
+folium.Marker(
+    [campus_coord[1], campus_coord[0]],
+    popup="🏫 Trường",
+    icon=folium.Icon(color="blue", icon="university")
+).add_to(m)
 
-            # ===== HIGHLIGHT ZONE =====
-            folium.Circle(
-                location=[geo[1], geo[0]],
-                radius=500,
-                color='red',
-                fill=True,
-                fill_opacity=0.1
-            ).add_to(m)
-
-            # ===== MINI MAP (PRO LOOK) =====
-            from folium.plugins import MiniMap
-            MiniMap().add_to(m)
-
-            # ===== LAYER CONTROL =====
-            folium.LayerControl().add_to(m)
-
-            # ===== RENDER =====
-            st_folium(m, width=750, height=550)
-
-        except Exception as e:
-            st.error(f"❌ API lỗi hoặc quá giới hạn: {e}")
+# ===== RENDER =====
+st_folium(m, width=750, height=550)
