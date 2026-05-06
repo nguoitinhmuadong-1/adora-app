@@ -4,7 +4,7 @@ import numpy as np
 import requests
 from geopy.geocoders import Nominatim
 import folium
-from folium.plugins import HeatMapWithTime, MiniMap
+from folium.plugins import HeatMap, MiniMap
 from streamlit_folium import st_folium
 import random
 
@@ -100,15 +100,13 @@ def get_distance(coord1, coord2):
     data = response.json()
     return data["routes"][0]["summary"]["distance"] / 1000
 
-# ===== HEATMAP PRO (STATIC) =====
-st.markdown("### 🔥 Bản đồ HeatMap giá trọ")
-
+# ===== HEATMAP DATA =====
 @st.cache_data
 def generate_heatmap_data(center, campus_coord, area, tien_nghi, gio_giac, so_nguoi, tien_ich):
     data = []
     lat_center, lon_center = center[1], center[0]
 
-    for _ in range(300):  # nhiều điểm hơn = mịn hơn
+    for _ in range(300):
         lat = lat_center + random.uniform(-0.01, 0.01)
         lon = lon_center + random.uniform(-0.01, 0.01)
 
@@ -124,66 +122,95 @@ def generate_heatmap_data(center, campus_coord, area, tien_nghi, gio_giac, so_ng
 
     return data
 
+# ===== BUTTON =====
+if st.button("🔮 Dự đoán ngay"):
+    st.session_state.show_result = True
 
-heat_data = generate_heatmap_data(
-    geo,
-    campus_coord,
-    area,
-    tien_nghi,
-    gio_giac,
-    so_nguoi,
-    tien_ich
-)
+# ===== RESULT =====
+if st.session_state.show_result:
 
-# ===== MAP =====
-m = folium.Map(
-    location=[geo[1], geo[0]],
-    zoom_start=14,
-    tiles="CartoDB dark_matter"   # 🔥 đẹp
-)
+    geo = geocode(address)
 
-# ===== HEATMAP =====
-HeatMap(
-    heat_data,
-    radius=20,
-    blur=18,
-    max_zoom=15,
-    gradient={
-        0.2: 'blue',
-        0.4: 'lime',
-        0.6: 'yellow',
-        0.8: 'orange',
-        1.0: 'red'
-    }
-).add_to(m)
+    if geo is None:
+        st.error("❌ Không tìm được địa chỉ")
+    else:
+        campus_coord = campuses[campus_name]
 
-# ===== MARKERS =====
-folium.Marker(
-    [geo[1], geo[0]],
-    popup="📍 Bạn ở đây",
-    tooltip="Bạn ở đây",
-    icon=folium.Icon(color="red", icon="home")
-).add_to(m)
+        try:
+            distance = get_distance(geo, campus_coord)
 
-folium.Marker(
-    [campus_coord[1], campus_coord[0]],
-    popup="🏫 Trường",
-    tooltip="Trường",
-    icon=folium.Icon(color="blue", icon="university")
-).add_to(m)
+            features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
+            price = model.predict(features)[0]
 
-# ===== VÙNG XUNG QUANH =====
-folium.Circle(
-    location=[geo[1], geo[0]],
-    radius=500,
-    color='red',
-    fill=True,
-    fill_opacity=0.1
-).add_to(m)
+            # ===== RESULT CARD =====
+            st.markdown(f"""
+            <div style='background-color:#1e1e2f;padding:20px;border-radius:15px;text-align:center;'>
+                <h3 style='color:#00ffcc;'>📏 {distance:.2f} km</h3>
+                <h2 style='color:#ff4b4b;'>💰 {int(price):,} VND</h2>
+                <p style='color:gray;'>Giá dự đoán</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-# ===== MINI MAP =====
-from folium.plugins import MiniMap
-MiniMap().add_to(m)
+            # ===== HEATMAP =====
+            st.markdown("### 🔥 Bản đồ HeatMap giá trọ")
 
-# ===== RENDER =====
-st_folium(m, width=750, height=550)
+            heat_data = generate_heatmap_data(
+                geo,
+                campus_coord,
+                area,
+                tien_nghi,
+                gio_giac,
+                so_nguoi,
+                tien_ich
+            )
+
+            m = folium.Map(
+                location=[geo[1], geo[0]],
+                zoom_start=14,
+                tiles="CartoDB dark_matter"
+            )
+
+            HeatMap(
+                heat_data,
+                radius=20,
+                blur=18,
+                max_zoom=15,
+                gradient={
+                    0.2: 'blue',
+                    0.4: 'lime',
+                    0.6: 'yellow',
+                    0.8: 'orange',
+                    1.0: 'red'
+                }
+            ).add_to(m)
+
+            # markers
+            folium.Marker(
+                [geo[1], geo[0]],
+                popup="📍 Bạn ở đây",
+                tooltip="Bạn ở đây",
+                icon=folium.Icon(color="red", icon="home")
+            ).add_to(m)
+
+            folium.Marker(
+                [campus_coord[1], campus_coord[0]],
+                popup="🏫 Trường",
+                tooltip="Trường",
+                icon=folium.Icon(color="blue", icon="university")
+            ).add_to(m)
+
+            # vùng xung quanh
+            folium.Circle(
+                location=[geo[1], geo[0]],
+                radius=500,
+                color='red',
+                fill=True,
+                fill_opacity=0.1
+            ).add_to(m)
+
+            MiniMap().add_to(m)
+
+            st_folium(m, width=750, height=550)
+
+        except Exception as e:
+            st.error(f"❌ API lỗi hoặc quá giới hạn: {e}")
