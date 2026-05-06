@@ -199,3 +199,17 @@ if st.session_state.show_result:
 
         except Exception as e:
             st.error(f"❌ API lỗi hoặc dữ liệu lỗi: {e}")
+# ===== GEOCODE USER =====
+def geocode(address):
+    # Thay đổi user_agent thành email thật của bạn để Nominatim không chặn
+    geolocator = Nominatim(user_agent="rent_app_your_email@gmail.com") 
+    
+    try:
+        # Thêm timeout=10 để đợi server phản hồi tối đa 10 giây
+        location = geolocator.geocode(address, timeout=10)
+        if location:
+            return location.longitude, location.latitude
+    except Exception as e:
+        st.error(f"Lỗi khi lấy tọa độ: {e}")
+    
+    return None
