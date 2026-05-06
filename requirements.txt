@@ -1,7 +1,8 @@
 streamlit
-geopy
-requests
-scikit-learn
 pandas
+openpyxl
+geopy
 folium
 streamlit-folium
+numpy
+requests
