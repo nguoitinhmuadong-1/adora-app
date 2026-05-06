@@ -22,23 +22,53 @@ if "geo" not in st.session_state:
 # ===== STYLE =====
 st.markdown("""
 <style>
-body { background-color: #0e1117; }
-.stTextInput, .stNumberInput, .stSelectbox {
-    background-color: #1e1e2f;
-    padding: 10px;
-    border-radius: 10px;
+
+/* Nền toàn app */
+.stApp {
+    background: linear-gradient(135deg, #ff9a9e, #fecfef);
 }
+
+/* Xoá nền trắng mặc định */
+.block-container {
+    background: transparent !important;
+}
+
+/* Input sáng nhẹ */
+.stTextInput, .stNumberInput, .stSelectbox {
+    background-color: rgba(255,255,255,0.25);
+    border-radius: 12px;
+    padding: 10px;
+}
+
+/* Label */
+label {
+    color: #333 !important;
+    font-weight: 600;
+}
+
+/* Nút nổi */
 .stButton button {
-    background-color: #ff4b4b;
+    background: linear-gradient(90deg, #ff4b2b, #ff416c);
     color: white;
-    border-radius: 10px;
+    border-radius: 12px;
     height: 50px;
     font-size: 18px;
     width: 100%;
+    border: none;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
 }
+
+/* Card kết quả trắng */
+.result-box {
+    background: white;
+    padding: 25px;
+    border-radius: 16px;
+    text-align: center;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+}
+
 </style>
 """, unsafe_allow_html=True)
-
 # ===== HEADER =====
 st.markdown("""
 <h1 style='text-align: center;'>🏠 ADORA</h1>
