@@ -164,21 +164,23 @@ if st.session_state.show_result:
                 tien_ich
             )
 
+            # 🌞 MAP SÁNG
             m = folium.Map(
                 location=[geo[1], geo[0]],
                 zoom_start=14,
-                tiles="CartoDB dark_matter"
+                tiles="CartoDB positron"
             )
 
+            # 🔥 HEATMAP ĐẸP
             HeatMap(
                 heat_data,
                 radius=20,
                 blur=18,
                 max_zoom=15,
                 gradient={
-                    0.2: 'blue',
-                    0.4: 'lime',
-                    0.6: 'yellow',
+                    0.2: 'purple',
+                    0.4: 'blue',
+                    0.6: 'cyan',
                     0.8: 'orange',
                     1.0: 'red'
                 }
