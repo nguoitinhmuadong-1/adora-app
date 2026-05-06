@@ -17,6 +17,9 @@ st.set_page_config(page_title="ADORA", layout="centered")
 if "show_result" not in st.session_state:
     st.session_state.show_result = False
 
+if "geo" not in st.session_state:
+    st.session_state.geo = None
+
 # ===== STYLE =====
 st.markdown("""
 <style>
@@ -75,16 +78,19 @@ tien_nghi = 1 if tien_nghi == "Có" else 0
 gio_giac = 1 if gio_giac == "Có" else 0
 tien_ich = 1 if tien_ich == "Có" else 0
 
-# ===== GEO =====
-def geocode(address):
+# ===== GEO FIX (CACHE + ANTI RATE LIMIT) =====
+@st.cache_data(show_spinner=False)
+def geocode_cached(address):
     geolocator = Nominatim(user_agent="adora_app")
+
     for _ in range(3):
         try:
             location = geolocator.geocode(address, timeout=10)
             if location:
                 return location.longitude, location.latitude
-        except GeocoderUnavailable:
+        except:
             time.sleep(1)
+
     return 106.7009, 10.7769  # fallback HCM
 
 # ===== DISTANCE =====
@@ -115,7 +121,6 @@ def get_distance(coord1, coord2):
 def load_real_data():
     df = pd.read_excel("bandau_full.xlsx")
 
-    # chuẩn hóa tên cột
     df = df.rename(columns={
         "latitude": "lat",
         "longitude": "lon",
@@ -129,6 +134,7 @@ def load_real_data():
 # ===== BUTTON =====
 if st.button("🔮 Dự đoán ngay"):
     st.session_state.show_result = True
+    st.session_state.geo = None  # reset geo khi bấm lại
 
 # ===== RESULT =====
 if st.session_state.show_result:
@@ -137,7 +143,11 @@ if st.session_state.show_result:
         st.warning("⚠️ Vui lòng nhập địa chỉ")
         st.stop()
 
-    geo = geocode(address.strip())
+    # chỉ geocode 1 lần
+    if st.session_state.geo is None:
+        st.session_state.geo = geocode_cached(address.strip())
+
+    geo = st.session_state.geo
     campus_coord = campuses[campus_name]
 
     distance = get_distance(geo, campus_coord)
@@ -159,7 +169,6 @@ if st.session_state.show_result:
 
     df = load_real_data()
 
-    # nếu data quá lớn → giảm lag
     if len(df) > 1000:
         df = df.sample(800)
 
@@ -200,7 +209,6 @@ if st.session_state.show_result:
         }
     ).add_to(m)
 
-    # markers
     folium.Marker(
         [geo[1], geo[0]],
         popup="📍 Bạn ở đây",
