@@ -10,7 +10,12 @@ import random
 
 # ===== CONFIG =====
 st.set_page_config(page_title="Dự đoán giá phòng", layout="centered")
-
+st.markdown("""
+<link rel="apple-touch-icon" sizes="180x180" href="https://i.postimg.cc/sgjXstnS/logo.pnghttps://your-domain/logo.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ADORA">
+""", unsafe_allow_html=True)
 # ===== SESSION =====
 if "show_result" not in st.session_state:
     st.session_state.show_result = False
