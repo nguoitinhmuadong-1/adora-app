@@ -8,7 +8,6 @@ from streamlit_folium import st_folium
 import pandas as pd
 import time
 from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderUnavailable
 
 # ===== CONFIG =====
 st.set_page_config(page_title="ADORA", layout="centered")
@@ -78,7 +77,7 @@ tien_nghi = 1 if tien_nghi == "Có" else 0
 gio_giac = 1 if gio_giac == "Có" else 0
 tien_ich = 1 if tien_ich == "Có" else 0
 
-# ===== GEO FIX (CACHE + ANTI RATE LIMIT) =====
+# ===== GEO (FIX RATE LIMIT) =====
 @st.cache_data(show_spinner=False)
 def geocode_cached(address):
     geolocator = Nominatim(user_agent="adora_app")
@@ -91,7 +90,7 @@ def geocode_cached(address):
         except:
             time.sleep(1)
 
-    return 106.7009, 10.7769  # fallback HCM
+    return 106.7009, 10.7769  # fallback
 
 # ===== DISTANCE =====
 def get_distance(coord1, coord2):
@@ -116,7 +115,7 @@ def get_distance(coord1, coord2):
             (coord1[1] - coord2[1])**2
         ) * 111
 
-# ===== LOAD DATA REAL =====
+# ===== LOAD DATA REAL + FIX LAT/LON =====
 @st.cache_data
 def load_real_data():
     df = pd.read_excel("bandau_full.xlsx")
@@ -129,12 +128,30 @@ def load_real_data():
     })
 
     df = df.dropna(subset=["lat", "lon"])
-    return df
+
+    fixed_data = []
+
+    for _, row in df.iterrows():
+        lat = row["lat"]
+        lon = row["lon"]
+
+        # 🔥 FIX 1: đảo lat/lon nếu sai
+        if lat > 50:
+            lat, lon = lon, lat
+
+        # 🔥 FIX 2: scale sai (ví dụ 106700)
+        if lat > 1000:
+            lat = lat / 10000
+            lon = lon / 10000
+
+        fixed_data.append([lat, lon])
+
+    return fixed_data
 
 # ===== BUTTON =====
 if st.button("🔮 Dự đoán ngay"):
     st.session_state.show_result = True
-    st.session_state.geo = None  # reset geo khi bấm lại
+    st.session_state.geo = None
 
 # ===== RESULT =====
 if st.session_state.show_result:
@@ -143,7 +160,6 @@ if st.session_state.show_result:
         st.warning("⚠️ Vui lòng nhập địa chỉ")
         st.stop()
 
-    # chỉ geocode 1 lần
     if st.session_state.geo is None:
         st.session_state.geo = geocode_cached(address.strip())
 
@@ -164,19 +180,17 @@ if st.session_state.show_result:
     </div>
     """, unsafe_allow_html=True)
 
-    # ===== HEATMAP REAL =====
+    # ===== HEATMAP =====
     st.markdown("### 🔥 Bản đồ HeatMap giá trọ")
 
-    df = load_real_data()
+    points = load_real_data()
 
-    if len(df) > 1000:
-        df = df.sample(800)
+    if len(points) > 1000:
+        points = points[:800]
 
     heat_data = []
 
-    for _, row in df.iterrows():
-        lat = row["lat"]
-        lon = row["lon"]
+    for lat, lon in points:
 
         distance = np.sqrt(
             (lat - campus_coord[1])**2 +
