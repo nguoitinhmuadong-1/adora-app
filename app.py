@@ -10,14 +10,6 @@ import random
 
 # ===== CONFIG =====
 st.set_page_config(page_title="Dự đoán giá phòng", layout="centered")
-st.markdown(
-    """
-    <div style='text-align: center;'>
-        <img src='logo.png' width='180'/>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
 
 # ===== SESSION =====
 if "show_result" not in st.session_state:
