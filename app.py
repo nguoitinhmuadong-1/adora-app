@@ -109,7 +109,7 @@ def get_distance(coord1, coord2):
 # ===== LOAD HEATMAP DATA FROM EXCEL =====
 @st.cache_data
 def load_heatmap_data():
-    df = pd.read_excel("ch.xlsx",engine ='openyxl' )
+    df = pd.read_excel("ch.xlsx",engine ='openpyxl' )
 
     geolocator = Nominatim(user_agent="rent_heatmap")
 
