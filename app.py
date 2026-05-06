@@ -53,9 +53,9 @@ API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjMzNDdmOTk2ZDI4N
 
 # ===== CAMPUS (lat, lon) =====
 campuses = {
-    "UEH - Cơ sở A": (10.7769, 106.7009),
-    "UEH - Cơ sở B": (10.7626, 106.6660),
-    "UEH - Cơ sở N": (10.7306, 106.6943)
+    "UEH - Cơ sở A": (10.78316375006458, 106.6946721972536),
+    "UEH - Cơ sở B": (10.761242919118299, 106.6687259453133),
+    "UEH - Cơ sở N": (10.706330027897318, 106.64029545754002)
 }
 
 # ===== INPUT =====
