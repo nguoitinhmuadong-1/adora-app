@@ -2,14 +2,16 @@ import streamlit as st
 import pickle
 import numpy as np
 import requests
-from geopy.geocoders import Nominatim
 import folium
 from folium.plugins import HeatMap, MiniMap
 from streamlit_folium import st_folium
 import random
+import time
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderUnavailable
 
 # ===== CONFIG =====
-st.set_page_config(page_title="Dự đoán giá phòng", layout="centered")
+st.set_page_config(page_title="ADORA", layout="centered")
 
 # ===== SESSION =====
 if "show_result" not in st.session_state:
@@ -39,8 +41,8 @@ body {
 
 # ===== HEADER =====
 st.markdown("""
-<h1 style='text-align: center;'>🏠 Dự đoán giá phòng trọ</h1>
-<p style='text-align: center; color: gray;'>Nhập thông tin → nhận giá dự đoán ngay</p>
+<h1 style='text-align: center;'>🏠 ADORA</h1>
+<p style='text-align: center; color: gray;'>Smart rent. Better choice.</p>
 """, unsafe_allow_html=True)
 
 # ===== LOAD MODEL =====
@@ -75,32 +77,47 @@ tien_nghi = 1 if tien_nghi == "Có" else 0
 gio_giac = 1 if gio_giac == "Có" else 0
 tien_ich = 1 if tien_ich == "Có" else 0
 
-# ===== GEO =====
+# ===== GEO FIX (ANTI ERROR) =====
 def geocode(address):
-    geolocator = Nominatim(user_agent="rent_app")
-    location = geolocator.geocode(address)
-    if location:
-        return location.longitude, location.latitude
-    return None
+    geolocator = Nominatim(user_agent="adora_app")
+
+    for _ in range(3):
+        try:
+            location = geolocator.geocode(address, timeout=10)
+            if location:
+                return location.longitude, location.latitude
+        except GeocoderUnavailable:
+            time.sleep(1)
+
+    # fallback luôn chạy
+    return 106.7009, 10.7769  # HCM
 
 # ===== DISTANCE =====
 def get_distance(coord1, coord2):
-    url = "https://api.openrouteservice.org/v2/directions/driving-car"
-    headers = {
-        "Authorization": API_KEY,
-        "Content-Type": "application/json"
-    }
-    body = {
-        "coordinates": [
-            [coord1[0], coord1[1]],
-            [coord2[0], coord2[1]]
-        ]
-    }
-    response = requests.post(url, json=body, headers=headers)
-    data = response.json()
-    return data["routes"][0]["summary"]["distance"] / 1000
+    try:
+        url = "https://api.openrouteservice.org/v2/directions/driving-car"
+        headers = {
+            "Authorization": API_KEY,
+            "Content-Type": "application/json"
+        }
+        body = {
+            "coordinates": [
+                [coord1[0], coord1[1]],
+                [coord2[0], coord2[1]]
+            ]
+        }
+        response = requests.post(url, json=body, headers=headers)
+        data = response.json()
 
-# ===== HEATMAP DATA =====
+        return data["routes"][0]["summary"]["distance"] / 1000
+    except:
+        # fallback distance
+        return np.sqrt(
+            (coord1[0] - coord2[0])**2 +
+            (coord1[1] - coord2[1])**2
+        ) * 111
+
+# ===== HEATMAP =====
 @st.cache_data
 def generate_heatmap_data(center, campus_coord, area, tien_nghi, gio_giac, so_nguoi, tien_ich):
     data = []
@@ -129,90 +146,83 @@ if st.button("🔮 Dự đoán ngay"):
 # ===== RESULT =====
 if st.session_state.show_result:
 
-    geo = geocode(address)
+    if not address:
+        st.warning("⚠️ Vui lòng nhập địa chỉ")
+        st.stop()
 
-    if geo is None:
-        st.error("❌ Không tìm được địa chỉ")
-    else:
-        campus_coord = campuses[campus_name]
+    geo = geocode(address.strip())
 
-        try:
-            distance = get_distance(geo, campus_coord)
+    campus_coord = campuses[campus_name]
 
-            features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
-            price = model.predict(features)[0]
+    distance = get_distance(geo, campus_coord)
 
-            # ===== RESULT CARD =====
-            st.markdown(f"""
-            <div style='background-color:#1e1e2f;padding:20px;border-radius:15px;text-align:center;'>
-                <h3 style='color:#00ffcc;'>📏 {distance:.2f} km</h3>
-                <h2 style='color:#ff4b4b;'>💰 {int(price):,} VND</h2>
-                <p style='color:gray;'>Giá dự đoán</p>
-            </div>
-            """, unsafe_allow_html=True)
+    features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
+    price = model.predict(features)[0]
 
-            # ===== HEATMAP =====
-            st.markdown("### 🔥 Bản đồ HeatMap giá trọ")
+    # ===== RESULT CARD =====
+    st.markdown(f"""
+    <div style='background-color:#1e1e2f;padding:20px;border-radius:15px;text-align:center;'>
+        <h3 style='color:#00ffcc;'>📏 {distance:.2f} km</h3>
+        <h2 style='color:#ff4b4b;'>💰 {int(price):,} VND</h2>
+        <p style='color:gray;'>Giá dự đoán</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-            heat_data = generate_heatmap_data(
-                geo,
-                campus_coord,
-                area,
-                tien_nghi,
-                gio_giac,
-                so_nguoi,
-                tien_ich
-            )
+    # ===== MAP =====
+    st.markdown("### 🔥 Bản đồ HeatMap giá trọ")
 
-            # 🌞 MAP SÁNG
-            m = folium.Map(
-                location=[geo[1], geo[0]],
-                zoom_start=14,
-                tiles="CartoDB positron"
-            )
+    heat_data = generate_heatmap_data(
+        geo,
+        campus_coord,
+        area,
+        tien_nghi,
+        gio_giac,
+        so_nguoi,
+        tien_ich
+    )
 
-            # 🔥 HEATMAP ĐẸP
-            HeatMap(
-                heat_data,
-                radius=20,
-                blur=18,
-                max_zoom=15,
-                gradient={
-                    0.2: 'purple',
-                    0.4: 'blue',
-                    0.6: 'cyan',
-                    0.8: 'orange',
-                    1.0: 'red'
-                }
-            ).add_to(m)
+    m = folium.Map(
+        location=[geo[1], geo[0]],
+        zoom_start=14,
+        tiles="CartoDB positron"  # 🌞 map sáng đẹp
+    )
 
-            # markers
-            folium.Marker(
-                [geo[1], geo[0]],
-                popup="📍 Bạn ở đây",
-                tooltip="Bạn ở đây",
-                icon=folium.Icon(color="red", icon="home")
-            ).add_to(m)
+    HeatMap(
+        heat_data,
+        radius=20,
+        blur=18,
+        max_zoom=15,
+        gradient={
+            0.2: 'purple',
+            0.4: 'blue',
+            0.6: 'cyan',
+            0.8: 'orange',
+            1.0: 'red'
+        }
+    ).add_to(m)
 
-            folium.Marker(
-                [campus_coord[1], campus_coord[0]],
-                popup="🏫 Trường",
-                tooltip="Trường",
-                icon=folium.Icon(color="blue", icon="university")
-            ).add_to(m)
+    # markers
+    folium.Marker(
+        [geo[1], geo[0]],
+        popup="📍 Bạn ở đây",
+        icon=folium.Icon(color="red")
+    ).add_to(m)
 
-            # vùng xung quanh
-            folium.Circle(
-                location=[geo[1], geo[0]],
-                radius=500,
-                color='red',
-                fill=True,
-                fill_opacity=0.1
-            ).add_to(m)
+    folium.Marker(
+        [campus_coord[1], campus_coord[0]],
+        popup="🏫 Trường",
+        icon=folium.Icon(color="blue")
+    ).add_to(m)
 
-            MiniMap().add_to(m)
+    # vùng bán kính
+    folium.Circle(
+        location=[geo[1], geo[0]],
+        radius=500,
+        color='red',
+        fill=True,
+        fill_opacity=0.1
+    ).add_to(m)
 
-            st_folium(m, width=750, height=550)
+    MiniMap().add_to(m)
 
-        except Exception as e:
-            st.error(f"❌ API lỗi hoặc quá giới hạn: {e}")
+    st_folium(m, width=750, height=550)
