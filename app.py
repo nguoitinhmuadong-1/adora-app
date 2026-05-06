@@ -109,23 +109,14 @@ def get_distance(coord1, coord2):
 # ===== LOAD HEATMAP DATA FROM EXCEL =====
 @st.cache_data
 def load_heatmap_data():
-    try:
-        df = pd.read_excel("ch.xlsx", engine="openpyxl")
-    except Exception as e:
-        st.error(f"❌ Lỗi đọc file Excel: {e}")
-        return []
-
-    # kiểm tra cột
-    if "address" not in df.columns or "price" not in df.columns:
-        st.error("❌ File phải có cột: address và price")
-        return []
+    df = pd.read_excel("ch.xlsx",engine ='openyxl' )
 
     geolocator = Nominatim(user_agent="rent_heatmap")
 
     lat_list = []
     lon_list = []
 
-    for addr in df["address"]:
+    for addr in df["address"]:  # ⚠️ đổi tên nếu cột khác
         try:
             location = geolocator.geocode(addr)
             if location:
@@ -142,10 +133,6 @@ def load_heatmap_data():
     df["lon"] = lon_list
 
     df = df.dropna(subset=["lat", "lon"])
-
-    if df.empty:
-        st.warning("⚠️ Không có dữ liệu hợp lệ để vẽ HeatMap")
-        return []
 
     heat_data = df[["lat", "lon", "price"]].values.tolist()
 
