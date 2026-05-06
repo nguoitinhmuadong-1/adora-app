@@ -5,7 +5,7 @@ import requests
 import folium
 from folium.plugins import HeatMap, MiniMap
 from streamlit_folium import st_folium
-import random
+import pandas as pd
 import time
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderUnavailable
@@ -20,9 +20,7 @@ if "show_result" not in st.session_state:
 # ===== STYLE =====
 st.markdown("""
 <style>
-body {
-    background-color: #0e1117;
-}
+body { background-color: #0e1117; }
 .stTextInput, .stNumberInput, .stSelectbox {
     background-color: #1e1e2f;
     padding: 10px;
@@ -77,10 +75,9 @@ tien_nghi = 1 if tien_nghi == "Có" else 0
 gio_giac = 1 if gio_giac == "Có" else 0
 tien_ich = 1 if tien_ich == "Có" else 0
 
-# ===== GEO FIX (ANTI ERROR) =====
+# ===== GEO =====
 def geocode(address):
     geolocator = Nominatim(user_agent="adora_app")
-
     for _ in range(3):
         try:
             location = geolocator.geocode(address, timeout=10)
@@ -88,9 +85,7 @@ def geocode(address):
                 return location.longitude, location.latitude
         except GeocoderUnavailable:
             time.sleep(1)
-
-    # fallback luôn chạy
-    return 106.7009, 10.7769  # HCM
+    return 106.7009, 10.7769  # fallback HCM
 
 # ===== DISTANCE =====
 def get_distance(coord1, coord2):
@@ -108,36 +103,28 @@ def get_distance(coord1, coord2):
         }
         response = requests.post(url, json=body, headers=headers)
         data = response.json()
-
         return data["routes"][0]["summary"]["distance"] / 1000
     except:
-        # fallback distance
         return np.sqrt(
             (coord1[0] - coord2[0])**2 +
             (coord1[1] - coord2[1])**2
         ) * 111
 
-# ===== HEATMAP =====
+# ===== LOAD DATA REAL =====
 @st.cache_data
-def generate_heatmap_data(center, campus_coord, area, tien_nghi, gio_giac, so_nguoi, tien_ich):
-    data = []
-    lat_center, lon_center = center[1], center[0]
+def load_real_data():
+    df = pd.read_excel("bandau_full.xlsx")
 
-    for _ in range(300):
-        lat = lat_center + random.uniform(-0.01, 0.01)
-        lon = lon_center + random.uniform(-0.01, 0.01)
+    # chuẩn hóa tên cột
+    df = df.rename(columns={
+        "latitude": "lat",
+        "longitude": "lon",
+        "Lat": "lat",
+        "Lng": "lon"
+    })
 
-        distance = np.sqrt(
-            (lat - campus_coord[1])**2 +
-            (lon - campus_coord[0])**2
-        ) * 111
-
-        features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
-        price = model.predict(features)[0]
-
-        data.append([lat, lon, price])
-
-    return data
+    df = df.dropna(subset=["lat", "lon"])
+    return df
 
 # ===== BUTTON =====
 if st.button("🔮 Dự đoán ngay"):
@@ -151,7 +138,6 @@ if st.session_state.show_result:
         st.stop()
 
     geo = geocode(address.strip())
-
     campus_coord = campuses[campus_name]
 
     distance = get_distance(geo, campus_coord)
@@ -168,23 +154,36 @@ if st.session_state.show_result:
     </div>
     """, unsafe_allow_html=True)
 
-    # ===== MAP =====
+    # ===== HEATMAP REAL =====
     st.markdown("### 🔥 Bản đồ HeatMap giá trọ")
 
-    heat_data = generate_heatmap_data(
-        geo,
-        campus_coord,
-        area,
-        tien_nghi,
-        gio_giac,
-        so_nguoi,
-        tien_ich
-    )
+    df = load_real_data()
 
+    # nếu data quá lớn → giảm lag
+    if len(df) > 1000:
+        df = df.sample(800)
+
+    heat_data = []
+
+    for _, row in df.iterrows():
+        lat = row["lat"]
+        lon = row["lon"]
+
+        distance = np.sqrt(
+            (lat - campus_coord[1])**2 +
+            (lon - campus_coord[0])**2
+        ) * 111
+
+        features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
+        price = model.predict(features)[0]
+
+        heat_data.append([lat, lon, price])
+
+    # ===== MAP =====
     m = folium.Map(
         location=[geo[1], geo[0]],
         zoom_start=14,
-        tiles="CartoDB positron"  # 🌞 map sáng đẹp
+        tiles="CartoDB positron"
     )
 
     HeatMap(
@@ -214,7 +213,6 @@ if st.session_state.show_result:
         icon=folium.Icon(color="blue")
     ).add_to(m)
 
-    # vùng bán kính
     folium.Circle(
         location=[geo[1], geo[0]],
         radius=500,
