@@ -7,7 +7,7 @@ import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 import random
-
+from folium.plugins import HeatMapWithTime
 # ===== CONFIG =====
 st.set_page_config(page_title="Dự đoán giá phòng", layout="centered")
 # ===== SESSION =====
@@ -132,8 +132,6 @@ if st.session_state.show_result:
                 <p style='color:gray;'>Giá dự đoán</p>
             </div>
             """, unsafe_allow_html=True)
-
-           from folium.plugins import HeatMapWithTime
 
 st.markdown("### 🎬 Heatmap động (AI Simulation)")
 
