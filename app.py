@@ -47,7 +47,7 @@ st.markdown("""
 model = pickle.load(open("model.pkl", "rb"))
 
 # ===== API KEY =====
-API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjMzNDdmOTk2ZDI4NjQ3NzQ4ZjQ1YjYwNGZjYjBiY2Y3IiwiaCI6Im11cm11cjY0In0="
+API_KEY = "YOUR_API_KEY"
 
 # ===== CAMPUS =====
 campuses = {
@@ -100,7 +100,7 @@ def get_distance(coord1, coord2):
     data = response.json()
     return data["routes"][0]["summary"]["distance"] / 1000
 
-# ===== HEATMAP ANIMATION =====
+# ===== HEATMAP ANIMATION (FIXED) =====
 @st.cache_data
 def generate_animated_heatmap(center, campus_coord, area, tien_nghi, gio_giac, so_nguoi, tien_ich):
     lat_center, lon_center = center[1], center[0]
@@ -108,7 +108,9 @@ def generate_animated_heatmap(center, campus_coord, area, tien_nghi, gio_giac, s
     time_labels = []
 
     for t in range(5):
-        frame = []
+        temp_points = []
+        prices = []
+
         for _ in range(200):
             lat = lat_center + random.uniform(-0.01, 0.01)
             lon = lon_center + random.uniform(-0.01, 0.01)
@@ -121,9 +123,19 @@ def generate_animated_heatmap(center, campus_coord, area, tien_nghi, gio_giac, s
             features = np.array([[distance, area, tien_nghi, gio_giac, so_nguoi, tien_ich]])
             price = model.predict(features)[0]
 
+            # simulate biến động
             price = price * (1 + random.uniform(-0.1, 0.1) + t * 0.05)
 
-            frame.append([lat, lon, price])
+            prices.append(price)
+            temp_points.append((lat, lon, price))
+
+        min_p = min(prices)
+        max_p = max(prices)
+
+        frame = []
+        for lat, lon, price in temp_points:
+            norm_price = (price - min_p) / (max_p - min_p + 1e-6)
+            frame.append([lat, lon, norm_price])
 
         frames.append(frame)
         time_labels.append(f"T{t+1}")
