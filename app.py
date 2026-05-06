@@ -11,7 +11,7 @@ import random
 # ===== CONFIG =====
 st.set_page_config(page_title="Dự đoán giá phòng", layout="centered")
 st.markdown("""
-<link rel="apple-touch-icon" sizes="180x180" href="https://github.com/nguoitinhmuadong-1/adora-app/blob/e5016cc2e61d3aaadec67d02f260974b36e18ade/logo.png">
+<link rel="apple-touch-icon" sizes="180x180" href="logo.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ADORA">
