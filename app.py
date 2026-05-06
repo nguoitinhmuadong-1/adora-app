@@ -256,14 +256,14 @@ if st.session_state.show_result:
     folium.Marker(
         [geo[0], geo[1]],
         popup="📍 Bạn ở đây",
-        icon=folium.Icon(color="red")
+        icon=folium.Icon(color="red",icon='user')
     ).add_to(m)
 
     # campus
     folium.Marker(
         [campus_coord[0], campus_coord[1]],
         popup="🏫 Trường",
-        icon=folium.Icon(color="blue")
+        icon=folium.Icon(color="blue",icon='home')
     ).add_to(m)
 
     folium.Circle(
